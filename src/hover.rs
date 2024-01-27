@@ -37,7 +37,7 @@ pub struct MouseRaySource;
 impl MouseRay {
     /// returns cursor position in window space
     /// (-1,-1) -> bottom left and (1,1) -> upper right
-    pub fn cursor_to_pos(position: &Vec2, window: &Window) -> Vec2 {
+    pub(crate) fn cursor_to_pos(position: &Vec2, window: &Window) -> Vec2 {
         let (window_width, window_height) = (window.width(), window.height());
         Vec2::new(
             position.x / window_width * 2.0 - 1.0,
@@ -50,7 +50,7 @@ impl MouseRay {
         )
     }
 
-    pub fn pos_from_camera(
+    pub(crate) fn pos_from_camera(
         camera: &Camera,
         projection: &Projection,
         transform: &GlobalTransform,
@@ -106,14 +106,6 @@ impl MouseRay {
             }
         }
     }
-}
-
-#[derive(Component)]
-pub struct Draggable;
-
-#[derive(Component)]
-struct Dragged {
-    start_pos: Vec3,
 }
 
 fn add_mouse_ray(mut commands: Commands) {
@@ -197,83 +189,6 @@ fn update_hover_state(
     }
 }
 
-//fn update_hover_end(
-//    mut commands: Commands,
-//    mesh_assets: Res<Assets<Mesh>>,
-//    ray_query: Query<&MouseRay>,
-//    mut ev_hover_end: EventWriter<HoverEnd>,
-//    query: Query<(&Handle<Mesh>, &GlobalTransform, Entity), With<Hover>>,
-//    mut hovered: ResMut<Hovered>,
-//) {
-//    for ray in ray_query.iter() {
-//        for (mesh_handle, transform, entity) in query.iter() {
-//            if let Some(mesh) = mesh_assets.get(mesh_handle) {
-//                if check_intersect(ray, mesh, transform).is_none() {
-//                      commands.entity(entity).remove::<Hover>();
-//                      ev_hover_end.send(HoverEnd { hovered: entity });
-//                      hovered.inner = None;
-//                }
-//            }
-//        }
-//
-//    }
-//}
-
-fn update_drag_start(
-    mut commands: Commands,
-    mouse_button_input: Res<Input<MouseButton>>,
-    query: Query<(Entity, &Transform), (With<Hover>, With<Draggable>)>,
-) {
-    for (entity, transform) in &query {
-        if mouse_button_input.just_pressed(MouseButton::Left) {
-            commands.entity(entity).insert(Dragged {
-                start_pos: transform.translation,
-            });
-        }
-    }
-}
-
-fn update_drag_end(
-    mut commands: Commands,
-    mouse_button_input: Res<Input<MouseButton>>,
-    query: Query<Entity, With<Dragged>>,
-) {
-    for entity in &query {
-        if mouse_button_input.just_released(MouseButton::Left) {
-            commands.entity(entity).remove::<Dragged>();
-        }
-    }
-}
-
-fn drag_system(mut query: Query<(&mut Transform, &Dragged)>, ray_query: Query<&MouseRay>) {
-    for MouseRay { ray } in ray_query.iter() {
-        for (mut transform, dragged) in query.iter_mut() {
-            // Define the y-coordinate of the plane
-            let plane_y = dragged.start_pos.y; // Change this value as needed
-
-            // Calculate the direction vector of the ray in the xy plane
-            let direction_xy = Vec3::new(ray.direction.x, 0.0, ray.direction.z);
-
-            // If the ray is not parallel to the plane
-            if direction_xy.length() > f32::EPSILON {
-                // Calculate intersection of ray with the plane at y = plane_y
-                let t = (plane_y - ray.origin.y) / ray.direction.y;
-                let intersection_point = ray.origin + ray.direction * t;
-
-                // Calculate the offset from the start position, ignoring y
-                let offset = Vec3::new(
-                    intersection_point.x - dragged.start_pos.x,
-                    0.0,
-                    intersection_point.z - dragged.start_pos.z,
-                );
-
-                transform.translation.x = dragged.start_pos.x + offset.x;
-                transform.translation.z = dragged.start_pos.z + offset.z;
-            }
-        }
-    }
-}
-
 /// Some(distance) if there is an intersection
 /// None otherwise
 fn check_intersect(ray: &MouseRay, mesh: &Mesh, transform: &GlobalTransform) -> Option<f32> {
@@ -350,14 +265,11 @@ pub fn moller_trumbore(
         return None;
     }
 
-    // At this stage we can compute t to find out where the intersection point is on the line
     let t = f * edge2.dot(q);
 
     if t > epsilon {
-        // Ray intersection
         Some(t)
     } else {
-        // This means that there is a line intersection but not a ray intersection
         None
     }
 }
@@ -371,10 +283,6 @@ impl Plugin for MouseRayPlugin {
             .add_systems(Startup, add_mouse_ray)
             .add_systems(Startup, add_resources)
             .add_systems(Update, update_mouse_ray)
-            .add_systems(Update, update_hover_state)
-            //            .add_systems(Update, update_hover_end)
-            .add_systems(Update, update_drag_start)
-            .add_systems(Update, update_drag_end)
-            .add_systems(Update, drag_system);
+            .add_systems(Update, update_hover_state);
     }
 }

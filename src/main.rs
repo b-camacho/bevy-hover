@@ -48,7 +48,6 @@ fn setup(
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
-    // ambient light
     commands.insert_resource(AmbientLight {
         color: Color::WHITE,
         brightness: 0.01,
@@ -134,22 +133,6 @@ fn setup(
         .insert(hover::MouseRaySource);
 }
 
-#[derive(Resource)]
-struct HoverMaterial(Handle<StandardMaterial>);
-
-#[derive(Resource)]
-struct HoverMaterialStore(HashMap<Entity, Handle<StandardMaterial>>);
-
-fn add_materials(mut commands: Commands, mut materials: ResMut<Assets<StandardMaterial>>) {
-    let hover_material = materials.add(StandardMaterial {
-        base_color: Color::RED,
-        ..Default::default()
-    });
-
-    commands.insert_resource(HoverMaterial(hover_material));
-    commands.insert_resource(HoverMaterialStore(HashMap::new()));
-}
-
 fn update_material(
     mut commands: Commands,
     mut ev_hover_start: EventReader<hover::HoverStart>,
@@ -157,7 +140,6 @@ fn update_material(
     mut query: Query<&mut SphereSeg>,
 ) {
     for ev in ev_hover_start.read() {
-        println!("got hover start event for {ev:?}");
         if let Ok(seg) = query.get_mut(ev.hovered) {
             commands
                 .entity(ev.hovered)
@@ -191,7 +173,6 @@ fn main() {
         .add_plugins(WorldInspectorPlugin::default())
         .add_plugins(DebugGridPlugin::with_floor_grid())
         .add_systems(Startup, setup)
-        .add_systems(Startup, add_materials)
         .add_systems(Update, update_material)
         .add_systems(Update, sphere_rot)
         .add_plugins(hover::MouseRayPlugin)
