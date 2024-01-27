@@ -1,0 +1,11 @@
+[package]
+name = "bevy-hover"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+bevy = "0.12.1"
+bevy-inspector-egui = "0.21.0"
+bevy_debug_grid = "0.4.0"
