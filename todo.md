@@ -1,8 +1,8 @@
-- [ in progress ] events for hover start/end
+- [x] events for hover start/end
 - [ ] fade out hover color for demo
 - [ ] static image / video for demo
-- [ ] ortho camera support
-- [ ] fix multiple hovers for occluded items
+- [x] ortho camera support
+- [x] fix multiple hovers for occluded items
 - [ ] publish the crate
 - [ ] click support (click start/env event)
 - [ ] add click anim to demo

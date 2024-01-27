@@ -120,9 +120,9 @@ fn setup(
                 transform: Transform::from_xyz(0.0, 0.0, 3.0),
                 tonemapping: Tonemapping::TonyMcMapface,
                 projection: Projection::Orthographic(OrthographicProjection {
-                    scale:0.01,
-                    ..default()}
-                        ),
+                    scale: 0.005,
+                    ..default()
+                }),
                 ..Default::default()
             },
             BloomSettings {
@@ -190,7 +190,6 @@ fn main() {
         )
         .add_plugins(WorldInspectorPlugin::default())
         .add_plugins(DebugGridPlugin::with_floor_grid())
-
         .add_systems(Startup, setup)
         .add_systems(Startup, add_materials)
         .add_systems(Update, update_material)

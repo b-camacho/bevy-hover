@@ -11,6 +11,11 @@ pub struct Hoverable {
 #[derive(Component)]
 struct Hover;
 
+#[derive(Resource)]
+pub struct Hovered {
+    pub inner: Option<Entity>,
+}
+
 #[derive(Event, Debug)]
 pub struct HoverStart {
     pub hovered: Entity,
@@ -55,7 +60,6 @@ impl MouseRay {
         // eyespace - position in 3d, with a coordinate frame centered on the camera
         // imagespace - position in the 2d image
 
-
         // position of the cursor, in imagespace [-1, 1]
         let clip_space_pos = Vec3::new(cursor_pos.x, cursor_pos.y, 0.0);
 
@@ -94,10 +98,10 @@ impl MouseRay {
                     // I honestly thought I understood this pretty well until this point
                     // this is where we extract the rotation component of the camera's 4x4 3d affine
                     // transform matrix, then multiply a unit vector by the resulting 3x3 matrix
-                    // 
+                    //
                     // only the resulting rotated vector is always equivalent to the 3rd column of
                     // the affine transform matrix * (-1)
-                    direction: -1.0 * m.z_axis.truncate()
+                    direction: -1.0 * m.z_axis.truncate(),
                 }
             }
         }
@@ -116,6 +120,10 @@ fn add_mouse_ray(mut commands: Commands) {
     commands.spawn(MouseRay::default());
 }
 
+fn add_resources(mut commands: Commands) {
+    commands.insert_resource(Hovered { inner: None });
+}
+
 fn update_mouse_ray(
     mut query: Query<&mut MouseRay>,
     windows: Query<&Window>,
@@ -130,46 +138,86 @@ fn update_mouse_ray(
             mouse_ray.ray = ray;
         }
     }
-    
 }
 
-fn update_hover_start(
+fn update_hover_state(
     mut commands: Commands,
     mesh_assets: Res<Assets<Mesh>>,
     ray_query: Query<&MouseRay>,
     mut ev_hover_start: EventWriter<HoverStart>,
-    query: Query<(&Handle<Mesh>, &GlobalTransform, &Hoverable, Entity), Without<Hover>>,
+    mut ev_hover_end: EventWriter<HoverEnd>,
+    query: Query<(&Handle<Mesh>, &GlobalTransform, Entity), With<Hoverable>>,
+    mut hovered: ResMut<Hovered>,
 ) {
     for ray in ray_query.iter() {
-        for (mesh_handle, transform, _hoverable, entity) in query.iter() {
+        // Option<(distance, intersectee)>
+        let mut intersect_nearest: Option<(f32, Entity)> = None;
+
+        for (mesh_handle, transform, entity) in query.iter() {
             if let Some(mesh) = mesh_assets.get(mesh_handle) {
-                if check_intersect(ray, mesh, transform) {
+                let intersect = check_intersect(ray, mesh, transform);
+                match (intersect, intersect_nearest) {
+                    (Some(i), Some((i_n, _))) => {
+                        if i_n > i {
+                            intersect_nearest = Some((i, entity))
+                        }
+                    }
+                    (Some(i), None) => intersect_nearest = Some((i, entity)),
+                    _ => (),
+                }
+            }
+        }
+        if let Some((_, entity)) = intersect_nearest {
+            if let Some(prev_hover) = hovered.inner {
+                if prev_hover != entity {
+                    commands.entity(prev_hover).remove::<Hover>();
+                    ev_hover_end.send(HoverEnd {
+                        hovered: prev_hover,
+                    });
+
                     commands.entity(entity).insert(Hover {});
                     ev_hover_start.send(HoverStart { hovered: entity });
+                    hovered.inner = Some(entity);
                 }
+            } else {
+                commands.entity(entity).insert(Hover {});
+                ev_hover_start.send(HoverStart { hovered: entity });
+                hovered.inner = Some(entity);
+            }
+        } else {
+            // no intersect, no entity currently hovered
+            if let Some(prev_hover) = hovered.inner {
+                commands.entity(prev_hover).remove::<Hover>();
+                ev_hover_end.send(HoverEnd {
+                    hovered: prev_hover,
+                });
+                hovered.inner = None;
             }
         }
     }
 }
 
-fn update_hover_end(
-    mut commands: Commands,
-    mesh_assets: Res<Assets<Mesh>>,
-    ray_query: Query<&MouseRay>,
-    mut ev_hover_end: EventWriter<HoverEnd>,
-    query: Query<(&Handle<Mesh>, &GlobalTransform, Entity), With<Hover>>,
-) {
-    for ray in ray_query.iter() {
-        for (mesh_handle, transform, entity) in query.iter() {
-            if let Some(mesh) = mesh_assets.get(mesh_handle) {
-                if !check_intersect(ray, mesh, transform) {
-                    commands.entity(entity).remove::<Hover>();
-                    ev_hover_end.send(HoverEnd { hovered: entity })
-                }
-            }
-        }
-    }
-}
+//fn update_hover_end(
+//    mut commands: Commands,
+//    mesh_assets: Res<Assets<Mesh>>,
+//    ray_query: Query<&MouseRay>,
+//    mut ev_hover_end: EventWriter<HoverEnd>,
+//    query: Query<(&Handle<Mesh>, &GlobalTransform, Entity), With<Hover>>,
+//    mut hovered: ResMut<Hovered>,
+//) {
+//    for ray in ray_query.iter() {
+//        for (mesh_handle, transform, entity) in query.iter() {
+//            if let Some(mesh) = mesh_assets.get(mesh_handle) {
+//                if check_intersect(ray, mesh, transform).is_none() {
+//                      commands.entity(entity).remove::<Hover>();
+//                      ev_hover_end.send(HoverEnd { hovered: entity });
+//                      hovered.inner = None;
+//                }
+//            }
+//        }
+//
+//    }
+//}
 
 fn update_drag_start(
     mut commands: Commands,
@@ -226,11 +274,14 @@ fn drag_system(mut query: Query<(&mut Transform, &Dragged)>, ray_query: Query<&M
     }
 }
 
-fn check_intersect(ray: &MouseRay, mesh: &Mesh, transform: &GlobalTransform) -> bool {
+/// Some(distance) if there is an intersection
+/// None otherwise
+fn check_intersect(ray: &MouseRay, mesh: &Mesh, transform: &GlobalTransform) -> Option<f32> {
     if let Some(VertexAttributeValues::Float32x3(vertex_positions)) =
         mesh.attribute(Mesh::ATTRIBUTE_POSITION)
     {
         let inner_fn = |indices: &Vec<u32>| {
+            let mut min_dist: Option<f32> = None;
             for tri in indices.chunks_exact(3) {
                 let v0 = Vec3::from(vertex_positions[tri[0] as usize]);
                 let v1 = Vec3::from(vertex_positions[tri[1] as usize]);
@@ -243,11 +294,14 @@ fn check_intersect(ray: &MouseRay, mesh: &Mesh, transform: &GlobalTransform) -> 
                 let v2 = mat.transform_point3(v2);
 
                 // Use Moller-Trumbore algorithm here to check for intersection
-                if moller_trumbore(ray.ray.origin, ray.ray.direction, v0, v1, v2).is_some() {
-                    return true;
-                }
+                let dist = moller_trumbore(ray.ray.origin, ray.ray.direction, v0, v1, v2);
+                match (dist, min_dist) {
+                    (Some(d), Some(md)) if md > d => min_dist = Some(d),
+                    (Some(d), None) => min_dist = Some(d),
+                    _ => (),
+                };
             }
-            false
+            min_dist
         };
 
         match mesh.indices() {
@@ -256,10 +310,10 @@ fn check_intersect(ray: &MouseRay, mesh: &Mesh, transform: &GlobalTransform) -> 
             Some(bevy::render::mesh::Indices::U16(indices)) => {
                 inner_fn(&indices.iter().map(|x| *x as u32).collect())
             }
-            None => false,
+            None => None,
         }
     } else {
-        false
+        None
     }
 }
 
@@ -315,9 +369,10 @@ impl Plugin for MouseRayPlugin {
         app.add_event::<HoverStart>()
             .add_event::<HoverEnd>()
             .add_systems(Startup, add_mouse_ray)
+            .add_systems(Startup, add_resources)
             .add_systems(Update, update_mouse_ray)
-            .add_systems(Update, update_hover_start)
-            .add_systems(Update, update_hover_end)
+            .add_systems(Update, update_hover_state)
+            //            .add_systems(Update, update_hover_end)
             .add_systems(Update, update_drag_start)
             .add_systems(Update, update_drag_end)
             .add_systems(Update, drag_system);
