@@ -42,12 +42,89 @@ fn sphere_rot(
     }
 }
 
-fn setup(
+static NEED_MESH_SETUP: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(true);
+
+fn setup_meshes(
     mut commands: Commands,
     asset_server: Res<AssetServer>,
-    mut meshes: ResMut<Assets<Mesh>>,
+    meshes: Res<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
+    if !NEED_MESH_SETUP.load(std::sync::atomic::Ordering::Relaxed) {
+        return; // we already initialized the meshes
+    }
+    let handles = (0..80)
+        .map(|idx| asset_server.get_handle(format!("ico.glb#Mesh{idx}/Primitive0")))
+        .collect::<Vec<_>>();
+    if handles.iter().all(|h| h.is_some()) {
+        println!("all meshes loaded");
+    } else {
+        return;
+    }
+
+    let mut sphere = commands.spawn(SpatialBundle::default());
+    sphere.insert(SphereRot {});
+    let sid = sphere.id();
+
+    let mut ids = Vec::new();
+
+    for handle in handles {
+        let handle: Handle<Mesh> = handle.unwrap();
+
+        let mesh = meshes.get(handle.clone()).unwrap();
+
+        let pos = mesh.attribute(Mesh::ATTRIBUTE_POSITION);
+        let avg_z = match pos {
+            Some(bevy::render::mesh::VertexAttributeValues::Float32x3(arr)) => {
+                let (cnt, s) = arr
+                    .iter()
+                    .fold((0, 0.0), |(cnt, s), [_x, _y, z]| (cnt + 1, s + z));
+                Some(s / (cnt as f32))
+            }
+            _ => None,
+        }
+        .unwrap();
+
+        let map_from_height = |to_range| {
+            let (to_start, to_end) = to_range;
+            (avg_z).map((-1.0, 1.0), (to_start, to_end))
+        };
+
+        // hsla luminance goes from 0 to 1
+        let l = map_from_height((0.6, 0.8));
+        // hsla hue goes from 0 to 360
+        let h = map_from_height((190.0, 330.0));
+
+        let material = materials.add(StandardMaterial {
+            base_color: Color::GRAY.with_l(l),
+            ..default()
+        });
+
+        let hover_material = materials.add(StandardMaterial {
+            base_color: Color::hsla(h, 0.5, 0.75, 1.0),
+            emissive: Color::hsla(h, 0.5, 0.75, 1.0),
+            ..default()
+        });
+        let mut seg = commands.spawn(PbrBundle {
+            mesh: handle,
+            material: material.clone(),
+            ..default()
+        });
+        seg.insert(SphereSeg {
+            idle_material: material,
+            hover_material: hover_material.clone(),
+        });
+        ids.push(seg.id());
+        seg.insert(hover::Hoverable {
+            material: Some(hover_material),
+        });
+    }
+
+    NEED_MESH_SETUP.store(false, std::sync::atomic::Ordering::Relaxed);
+    commands.entity(sid).push_children(&ids);
+}
+
+fn setup(mut commands: Commands, asset_server: Res<AssetServer>) {
     commands.insert_resource(AmbientLight {
         color: Color::WHITE,
         brightness: 0.01,
@@ -65,48 +142,10 @@ fn setup(
         vel: Quat::from_euler(EulerRot::ZYX, 0.1, 0.1, 0.0),
     });
 
-    let mut sphere = commands.spawn(SpatialBundle::default());
-    sphere.insert(SphereRot {});
-    let sid = sphere.id();
-
-    let mut ids = Vec::new();
     for idx in 0..80 {
-        let mesh = asset_server.load(format!("ico.glb#Mesh{idx}/Primitive0"));
-        let map_from_idx = |to_range| {
-            let (to_start, to_end) = to_range;
-            (idx as f32).map((0.0, 80.0), (to_start, to_end))
-        };
-        // hsla luminance goes from 0 to 1
-        let l = map_from_idx((0.6, 0.8));
-        // hsla hue goes from 0 to 360
-        let h = map_from_idx((0.0, 360.0));
-
-        let material = materials.add(StandardMaterial {
-            base_color: Color::GRAY.with_l(l),
-            ..default()
-        });
-
-        let hover_material = materials.add(StandardMaterial {
-            base_color: Color::hsla(h, 0.5, l, 1.0),
-            emissive: Color::hsla(h, 0.5, l, 1.0),
-            ..default()
-        });
-        let mut seg = commands.spawn(PbrBundle {
-            mesh,
-            material: material.clone(),
-            ..default()
-        });
-        seg.insert(SphereSeg {
-            idle_material: material,
-            hover_material: hover_material.clone(),
-        });
-        ids.push(seg.id());
-        seg.insert(hover::Hoverable {
-            material: Some(hover_material),
-        });
+        // meshes load in the background
+        let _: Handle<Mesh> = asset_server.load(format!("ico.glb#Mesh{idx}/Primitive0"));
     }
-
-    commands.entity(sid).push_children(&ids);
 
     // camera
     commands
@@ -175,6 +214,7 @@ fn main() {
         .add_systems(Startup, setup)
         .add_systems(Update, update_material)
         .add_systems(Update, sphere_rot)
+        .add_systems(Update, setup_meshes)
         .add_plugins(hover::MouseRayPlugin)
         .run();
 }
