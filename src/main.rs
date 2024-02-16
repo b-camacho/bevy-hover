@@ -53,10 +53,15 @@ fn setup_meshes(
     if !NEED_MESH_SETUP.load(std::sync::atomic::Ordering::Relaxed) {
         return; // we already initialized the meshes
     }
-    let handles = (0..80)
-        .map(|idx| asset_server.get_handle(format!("ico.glb#Mesh{idx}/Primitive0")))
+    let meshes_handles = (0..80)
+        .map(|idx| 
+             {
+                 let h = asset_server.get_handle(format!("ico.glb#Mesh{idx}/Primitive0"));
+                 (h.clone().and_then(|h| meshes.get(h)), h)
+             }
+             )
         .collect::<Vec<_>>();
-    if handles.iter().all(|h| h.is_some()) {
+    if meshes_handles.iter().all(|(m, h)| m.is_some() && h.is_some()) {
         println!("all meshes loaded");
     } else {
         return;
@@ -68,10 +73,9 @@ fn setup_meshes(
 
     let mut ids = Vec::new();
 
-    for handle in handles {
-        let handle: Handle<Mesh> = handle.unwrap();
-
-        let mesh = meshes.get(handle.clone()).unwrap();
+    for (mesh, handle) in meshes_handles {
+        let handle = handle.unwrap();
+        let mesh = mesh.unwrap();
 
         let pos = mesh.attribute(Mesh::ATTRIBUTE_POSITION);
         let avg_z = match pos {
