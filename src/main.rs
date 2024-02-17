@@ -7,6 +7,7 @@ use bevy_debug_grid::*;
 use bevy_inspector_egui::quick::WorldInspectorPlugin;
 use std::collections::HashMap;
 use std::f32::consts::PI;
+use std::time::Duration;
 
 mod hover;
 
@@ -20,7 +21,7 @@ struct SphereRot {}
 
 #[derive(Component)]
 struct SphereSeg {
-    idle_material: Handle<StandardMaterial>,
+    hover_start: Duration,
     hover_material: Handle<StandardMaterial>,
 }
 
@@ -42,93 +43,9 @@ fn sphere_rot(
     }
 }
 
-static NEED_MESH_SETUP: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(true);
-
-fn setup_meshes(
-    mut commands: Commands,
-    asset_server: Res<AssetServer>,
-    meshes: Res<Assets<Mesh>>,
+fn setup(mut commands: Commands, asset_server: Res<AssetServer>,
     mut materials: ResMut<Assets<StandardMaterial>>,
-) {
-    if !NEED_MESH_SETUP.load(std::sync::atomic::Ordering::Relaxed) {
-        return; // we already initialized the meshes
-    }
-    let meshes_handles = (0..80)
-        .map(|idx| 
-             {
-                 let h = asset_server.get_handle(format!("ico.glb#Mesh{idx}/Primitive0"));
-                 (h.clone().and_then(|h| meshes.get(h)), h)
-             }
-             )
-        .collect::<Vec<_>>();
-    if meshes_handles.iter().all(|(m, h)| m.is_some() && h.is_some()) {
-        println!("all meshes loaded");
-    } else {
-        return;
-    }
-
-    let mut sphere = commands.spawn(SpatialBundle::default());
-    sphere.insert(SphereRot {});
-    let sid = sphere.id();
-
-    let mut ids = Vec::new();
-
-    for (mesh, handle) in meshes_handles {
-        let handle = handle.unwrap();
-        let mesh = mesh.unwrap();
-
-        let pos = mesh.attribute(Mesh::ATTRIBUTE_POSITION);
-        let avg_z = match pos {
-            Some(bevy::render::mesh::VertexAttributeValues::Float32x3(arr)) => {
-                let (cnt, s) = arr
-                    .iter()
-                    .fold((0, 0.0), |(cnt, s), [_x, _y, z]| (cnt + 1, s + z));
-                Some(s / (cnt as f32))
-            }
-            _ => None,
-        }
-        .unwrap();
-
-        let map_from_height = |to_range| {
-            let (to_start, to_end) = to_range;
-            (avg_z).map((-1.0, 1.0), (to_start, to_end))
-        };
-
-        // hsla luminance goes from 0 to 1
-        let l = map_from_height((0.6, 0.8));
-        // hsla hue goes from 0 to 360
-        let h = map_from_height((190.0, 330.0));
-
-        let material = materials.add(StandardMaterial {
-            base_color: Color::GRAY.with_l(l),
-            ..default()
-        });
-
-        let hover_material = materials.add(StandardMaterial {
-            base_color: Color::hsla(h, 0.5, 0.75, 1.0),
-            emissive: Color::hsla(h, 0.5, 0.75, 1.0),
-            ..default()
-        });
-        let mut seg = commands.spawn(PbrBundle {
-            mesh: handle,
-            material: material.clone(),
-            ..default()
-        });
-        seg.insert(SphereSeg {
-            idle_material: material,
-            hover_material: hover_material.clone(),
-        });
-        ids.push(seg.id());
-        seg.insert(hover::Hoverable {
-            material: Some(hover_material),
-        });
-    }
-
-    NEED_MESH_SETUP.store(false, std::sync::atomic::Ordering::Relaxed);
-    commands.entity(sid).push_children(&ids);
-}
-
-fn setup(mut commands: Commands, asset_server: Res<AssetServer>) {
+         ) {
     commands.insert_resource(AmbientLight {
         color: Color::WHITE,
         brightness: 0.01,
@@ -146,10 +63,32 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>) {
         vel: Quat::from_euler(EulerRot::ZYX, 0.1, 0.1, 0.0),
     });
 
+    let mut sphere = commands.spawn(SpatialBundle::default());
+    sphere.insert(SphereRot {});
+    let sid = sphere.id();
+    let mut ids = Vec::new();
+
     for idx in 0..80 {
-        // meshes load in the background
-        let _: Handle<Mesh> = asset_server.load(format!("ico.glb#Mesh{idx}/Primitive0"));
+        let handle: Handle<Mesh> = asset_server.load(format!("ico.glb#Mesh{idx}/Primitive0"));
+
+        let material = materials.add(StandardMaterial {
+            base_color: Color::GRAY.with_l(0.7),
+            ..default()
+        });
+
+        let mut seg = commands.spawn(PbrBundle {
+            mesh: handle,
+            material: material.clone(),
+            ..default()
+        });
+        seg.insert(SphereSeg {
+            hover_start: Duration::from_secs(0),
+            hover_material: material.clone(),
+        });
+        ids.push(seg.id());
+        seg.insert(hover::Hoverable{});
     }
+    commands.entity(sid).push_children(&ids);
 
     // camera
     commands
@@ -178,25 +117,32 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>) {
 
 fn update_material(
     mut commands: Commands,
-    mut ev_hover_start: EventReader<hover::HoverStart>,
-    mut ev_hover_end: EventReader<hover::HoverEnd>,
     mut query: Query<&mut SphereSeg>,
+    mut ev_hover_start: EventReader<hover::HoverStart>,
+    time: Res<Time>,
 ) {
     for ev in ev_hover_start.read() {
-        if let Ok(seg) = query.get_mut(ev.hovered) {
+        if let Ok(mut seg) = query.get_mut(ev.hovered) {
             commands
                 .entity(ev.hovered)
                 .insert(seg.hover_material.clone());
+            seg.hover_start = time.elapsed();
         }
     }
+}
 
-    for ev in ev_hover_end.read() {
-        if let Ok(seg) = query.get_mut(ev.hovered) {
-            commands
-                .entity(ev.hovered)
-                .insert(seg.idle_material.clone());
+fn update_material_fade(
+    mut query: Query<&mut SphereSeg>,
+    time: Res<Time>,
+    mut assets: ResMut<Assets<StandardMaterial>>
+) {
+        for seg in query.iter_mut() {
+            let elapsed = (time.elapsed() - seg.hover_start).as_millis();
+            let v = (elapsed as f32).map_clamped((0.0, 1000.0), (0.75, 0.0));
+            let a = assets.get_mut(seg.hover_material.clone()).unwrap();
+            a.emissive.set_s(v);
+            a.emissive.set_l(v);
         }
-    }
 }
 
 fn main() {
@@ -213,12 +159,13 @@ fn main() {
                 })
                 .build(),
         )
-        .add_plugins(WorldInspectorPlugin::default())
-        .add_plugins(DebugGridPlugin::with_floor_grid())
+        // these are super nice for debugging
+        //.add_plugins(WorldInspectorPlugin::default())
+        //.add_plugins(DebugGridPlugin::with_floor_grid())
         .add_systems(Startup, setup)
         .add_systems(Update, update_material)
+        .add_systems(Update, update_material_fade)
         .add_systems(Update, sphere_rot)
-        .add_systems(Update, setup_meshes)
         .add_plugins(hover::MouseRayPlugin)
         .run();
 }
@@ -226,6 +173,7 @@ fn main() {
 pub trait MapRange {
     type Num;
     fn map(&self, src: (Self::Num, Self::Num), dst: (Self::Num, Self::Num)) -> Self::Num;
+    fn map_clamped(&self, src: (Self::Num, Self::Num), dst: (Self::Num, Self::Num)) -> Self::Num;
 }
 
 impl MapRange for f32 {
@@ -238,5 +186,14 @@ impl MapRange for f32 {
         let b = ((dst.0 * src.1) - (dst.1 * src.0)) / (src.1 - src.0);
         // y = mx+b
         (self * m) + b
+    }
+    fn map_clamped(&self, src: (f32, f32), dst: (f32, f32)) -> f32 {
+        let clamped = if src.0 <= src.1 {
+            self.clamp(src.0, src.1)
+        } else {
+            self.clamp(src.1, src.0)
+        };
+
+        clamped.map(src, dst)
     }
 }

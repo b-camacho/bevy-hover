@@ -4,12 +4,13 @@ use bevy::render::mesh::VertexAttributeValues;
 use std::collections::HashMap;
 
 #[derive(Component, Default)]
-pub struct Hoverable {
-    pub material: Option<Handle<StandardMaterial>>,
-}
+pub struct Hoverable;
 
 #[derive(Component)]
-struct Hover;
+pub struct Hover {
+    // time elapsed from app start to hover event start
+    pub since: std::time::Duration
+}
 
 #[derive(Resource)]
 pub struct Hovered {
@@ -140,6 +141,7 @@ fn update_hover_state(
     mut ev_hover_end: EventWriter<HoverEnd>,
     query: Query<(&Handle<Mesh>, &GlobalTransform, Entity), With<Hoverable>>,
     mut hovered: ResMut<Hovered>,
+    time: Res<Time>,
 ) {
     for ray in ray_query.iter() {
         // Option<(distance, intersectee)>
@@ -167,12 +169,12 @@ fn update_hover_state(
                         hovered: prev_hover,
                     });
 
-                    commands.entity(entity).insert(Hover {});
+                    commands.entity(entity).insert(Hover { since: time.elapsed() });
                     ev_hover_start.send(HoverStart { hovered: entity });
                     hovered.inner = Some(entity);
                 }
             } else {
-                commands.entity(entity).insert(Hover {});
+                commands.entity(entity).insert(Hover { since: time.elapsed() });
                 ev_hover_start.send(HoverStart { hovered: entity });
                 hovered.inner = Some(entity);
             }
