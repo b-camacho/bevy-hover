@@ -9,7 +9,7 @@ pub struct Hoverable;
 #[derive(Component)]
 pub struct Hover {
     // time elapsed from app start to hover event start
-    pub since: std::time::Duration
+    pub since: std::time::Duration,
 }
 
 #[derive(Resource)]
@@ -169,12 +169,16 @@ fn update_hover_state(
                         hovered: prev_hover,
                     });
 
-                    commands.entity(entity).insert(Hover { since: time.elapsed() });
+                    commands.entity(entity).insert(Hover {
+                        since: time.elapsed(),
+                    });
                     ev_hover_start.send(HoverStart { hovered: entity });
                     hovered.inner = Some(entity);
                 }
             } else {
-                commands.entity(entity).insert(Hover { since: time.elapsed() });
+                commands.entity(entity).insert(Hover {
+                    since: time.elapsed(),
+                });
                 ev_hover_start.send(HoverStart { hovered: entity });
                 hovered.inner = Some(entity);
             }

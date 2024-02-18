@@ -9,3 +9,5 @@ edition = "2021"
 bevy = "0.12.1"
 bevy-inspector-egui = "0.21.0"
 bevy_debug_grid = "0.4.0"
+wasm-bindgen = "0.2"
+

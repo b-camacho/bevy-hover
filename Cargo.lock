@@ -365,6 +365,7 @@ dependencies = [
  "bevy",
  "bevy-inspector-egui",
  "bevy_debug_grid",
+ "wasm-bindgen",
 ]
 
 [[package]]

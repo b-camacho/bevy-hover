@@ -2,22 +2,10 @@ use bevy::core_pipeline::bloom::{BloomCompositeMode, BloomSettings};
 use bevy::core_pipeline::tonemapping::Tonemapping;
 use bevy::prelude::*;
 use bevy::window::WindowResolution;
-use bevy_debug_grid::*;
-
-use bevy_inspector_egui::quick::WorldInspectorPlugin;
-use std::collections::HashMap;
 use std::f32::consts::PI;
 use std::time::Duration;
 
 mod hover;
-
-#[derive(Resource)]
-struct SphereRotVel {
-    pub vel: Quat, // Sphere rotates by the `vel` quat each second
-}
-
-#[derive(Component)]
-struct SphereRot {}
 
 #[derive(Component)]
 struct SphereSeg {
@@ -25,27 +13,11 @@ struct SphereSeg {
     hover_material: Handle<StandardMaterial>,
 }
 
-fn sphere_rot(
-    res_vel: Res<SphereRotVel>,
-    mut transform: Query<&mut Transform, With<SphereRot>>,
-    time: Res<Time>,
-) {
-    let delta = time.delta().as_secs_f32();
-    let rot = res_vel.vel;
-    let rot_scaled = {
-        let (plane, angle) = rot.to_axis_angle();
-        let angle_scaled = angle.map((0.0, PI), (0.0, PI * delta));
-        Quat::from_axis_angle(plane, angle_scaled)
-    };
-
-    for mut tr in transform.iter_mut() {
-        tr.rotate(rot_scaled);
-    }
-}
-
-fn setup(mut commands: Commands, asset_server: Res<AssetServer>,
+fn setup(
+    mut commands: Commands,
+    asset_server: Res<AssetServer>,
     mut materials: ResMut<Assets<StandardMaterial>>,
-         ) {
+) {
     commands.insert_resource(AmbientLight {
         color: Color::WHITE,
         brightness: 0.01,
@@ -86,7 +58,7 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>,
             hover_material: material.clone(),
         });
         ids.push(seg.id());
-        seg.insert(hover::Hoverable{});
+        seg.insert(hover::Hoverable {});
     }
     commands.entity(sid).push_children(&ids);
 
@@ -115,7 +87,7 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>,
         .insert(hover::MouseRaySource);
 }
 
-fn update_material(
+fn on_hover(
     mut commands: Commands,
     mut query: Query<&mut SphereSeg>,
     mut ev_hover_start: EventReader<hover::HoverStart>,
@@ -131,18 +103,18 @@ fn update_material(
     }
 }
 
-fn update_material_fade(
+fn fade(
     mut query: Query<&mut SphereSeg>,
     time: Res<Time>,
-    mut assets: ResMut<Assets<StandardMaterial>>
+    mut assets: ResMut<Assets<StandardMaterial>>,
 ) {
-        for seg in query.iter_mut() {
-            let elapsed = (time.elapsed() - seg.hover_start).as_millis();
-            let v = (elapsed as f32).map_clamped((0.0, 1000.0), (0.75, 0.0));
-            let a = assets.get_mut(seg.hover_material.clone()).unwrap();
-            a.emissive.set_s(v);
-            a.emissive.set_l(v);
-        }
+    for seg in query.iter_mut() {
+        let elapsed = (time.elapsed() - seg.hover_start).as_millis();
+        let v = (elapsed as f32).map_clamped((0.0, 1000.0), (0.75, 0.0));
+        let a = assets.get_mut(seg.hover_material.clone()).unwrap();
+        a.emissive.set_s(v);
+        a.emissive.set_l(v);
+    }
 }
 
 fn main() {
@@ -159,13 +131,10 @@ fn main() {
                 })
                 .build(),
         )
-        // these are super nice for debugging
-        //.add_plugins(WorldInspectorPlugin::default())
-        //.add_plugins(DebugGridPlugin::with_floor_grid())
         .add_systems(Startup, setup)
-        .add_systems(Update, update_material)
-        .add_systems(Update, update_material_fade)
-        .add_systems(Update, sphere_rot)
+        .add_systems(Update, on_hover)
+        .add_systems(Update, fade)
+        .add_systems(Update, rotate)
         .add_plugins(hover::MouseRayPlugin)
         .run();
 }
@@ -195,5 +164,33 @@ impl MapRange for f32 {
         };
 
         clamped.map(src, dst)
+    }
+}
+
+
+#[derive(Resource)]
+struct SphereRotVel {
+    pub vel: Quat, // Sphere rotates by the `vel` quat each second
+}
+
+#[derive(Component)]
+struct SphereRot {}
+
+/// Every tick, advance sphere's rotation
+fn rotate(
+    res_vel: Res<SphereRotVel>,
+    mut transform: Query<&mut Transform, With<SphereRot>>,
+    time: Res<Time>,
+) {
+    let delta = time.delta().as_secs_f32();
+    let rot = res_vel.vel;
+    let rot_scaled = {
+        let (plane, angle) = rot.to_axis_angle();
+        let angle_scaled = angle.map((0.0, PI), (0.0, PI * delta));
+        Quat::from_axis_angle(plane, angle_scaled)
+    };
+
+    for mut tr in transform.iter_mut() {
+        tr.rotate(rot_scaled);
     }
 }
