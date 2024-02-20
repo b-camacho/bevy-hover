@@ -10,6 +10,6 @@ Adds mouse hover events for your bevy meshes. Check out the [live wasm demo](htt
 - [x] ortho camera support
 - [x] fix multiple hovers for occluded items
 - [ ] publish the crate
-- [ ] click support (click start/env event)
+- [x] click support (click start/env event)
 - [ ] benchmark
 - [ ] add spatial index or similar

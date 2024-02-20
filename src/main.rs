@@ -32,6 +32,7 @@ fn setup(
     });
 
     commands.insert_resource(SphereRotVel {
+        // rotate around 2 perpendicular axes at about 5.7 deg/s
         vel: Quat::from_euler(EulerRot::ZYX, 0.1, 0.1, 0.0),
     });
 

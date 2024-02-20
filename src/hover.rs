@@ -4,11 +4,22 @@ use bevy::render::mesh::VertexAttributeValues;
 use std::collections::HashMap;
 
 #[derive(Component, Default)]
+/// This crate only looks at `Hoverable` entities
+/// Any entities that:
+/// - have  GlobalTransform`, `Mesh` and `Hoverable` components, and
+/// - are positioned under the cursor from the camera's perspective
+/// will:
+/// - be marked with the `Hovered` component, and
+/// - have their Entity id stored in `Hovered`, and
+/// - have a HoverStart event sent with their Entity id.
 pub struct Hoverable;
 
 #[derive(Component)]
+/// Hover component marks the Hoverable entity the mouse is currently over
+/// At any time, at most 1 entity is Hover
+/// If there are multiple entities, entity closest to camera is Hover
 pub struct Hover {
-    // time elapsed from app start to hover event start
+    /// time elapsed from app start to hover event start
     pub since: std::time::Duration,
 }
 
@@ -27,10 +38,23 @@ pub struct HoverEnd {
     pub hovered: Entity,
 }
 
+#[derive(Event, Debug)]
+pub struct HoverPress {
+    pub entity: Entity,
+    pub button: MouseButton,
+}
+
+#[derive(Event, Debug)]
+pub struct HoverRelease {
+    pub entity: Entity,
+    pub button: MouseButton
+}
+
 #[derive(Component, Default)]
 struct MouseRay {
     ray: Ray,
 }
+
 #[derive(Component)]
 pub struct MouseRaySource;
 
@@ -133,6 +157,7 @@ fn update_mouse_ray(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn update_hover_state(
     mut commands: Commands,
     mesh_assets: Res<Assets<Mesh>>,
@@ -194,6 +219,23 @@ fn update_hover_state(
         }
     }
 }
+
+fn update_hover_press(
+    mouse_button_input: Res<Input<MouseButton>>,
+    query: Query<Entity, With<Hover>>,
+    mut ev_hover_press: EventWriter<HoverPress>,
+    mut ev_hover_release: EventWriter<HoverRelease>,
+) {
+    for entity in &query {
+        for button in mouse_button_input.get_just_pressed() {
+            ev_hover_press.send(HoverPress{ entity, button: *button });
+        }
+        for button in mouse_button_input.get_just_released() { 
+            ev_hover_release.send(HoverRelease{ entity, button: *button });
+        }
+    }
+}
+
 
 /// Some(distance) if there is an intersection
 /// None otherwise
@@ -289,6 +331,7 @@ impl Plugin for MouseRayPlugin {
             .add_systems(Startup, add_mouse_ray)
             .add_systems(Startup, add_resources)
             .add_systems(Update, update_mouse_ray)
-            .add_systems(Update, update_hover_state);
+            .add_systems(Update, update_hover_state)
+            .add_systems(Update, update_hover_press);
     }
 }
