@@ -3,7 +3,13 @@ Adds mouse hover events for your bevy meshes. Check out the [live wasm demo](htt
 
 [![demo](https://github.com/b-camacho/bevy-hover/assets/12277070/58a56e45-6ad0-469a-a08b-16c62ec75010)](https://github.com/b-camacho/bevy-hover/assets/12277070/0eeac20b-1b98-4164-a909-a90547352b48)
 
-## todo
+## How into?
+check out `examples/main`
+
+## Testing?
+haha maybe. for now `cargo run --example main` and give it a good once over
+
+## Todo
 - [x] events for hover start/end
 - [x] fade out hover color for demo
 - [x] static image / video for demo

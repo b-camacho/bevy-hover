@@ -280,6 +280,7 @@ fn check_intersect(ray: &MouseRay, mesh: &Mesh, transform: &GlobalTransform) -> 
     }
 }
 
+/// implements https://en.wikipedia.org/wiki/M%C3%B6ller%E2%80%93Trumbore_intersection_algorithm
 pub fn moller_trumbore(
     ray_origin: Vec3,
     ray_direction: Vec3,
@@ -287,7 +288,6 @@ pub fn moller_trumbore(
     v1: Vec3,
     v2: Vec3,
 ) -> Option<f32> {
-    //
     let epsilon = 0.000_001;
     let edge1 = v1 - v0;
     let edge2 = v2 - v0;
@@ -328,6 +328,8 @@ impl Plugin for MouseRayPlugin {
     fn build(&self, app: &mut App) {
         app.add_event::<HoverStart>()
             .add_event::<HoverEnd>()
+            .add_event::<HoverPress>()
+            .add_event::<HoverRelease>()
             .add_systems(Startup, add_mouse_ray)
             .add_systems(Startup, add_resources)
             .add_systems(Update, update_mouse_ray)

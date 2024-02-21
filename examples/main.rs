@@ -5,7 +5,7 @@ use bevy::window::WindowResolution;
 use std::f32::consts::PI;
 use std::time::Duration;
 
-mod hover;
+use bevy_hover as hover;
 
 #[derive(Component)]
 struct SphereSeg {
@@ -118,6 +118,25 @@ fn fade(
     }
 }
 
+fn on_press(
+    mut query: Query<&mut SphereSeg>,
+    mut ev_press: EventReader<hover::HoverPress>,
+    mut assets: ResMut<Assets<StandardMaterial>>,
+    time: Res<Time>,
+) {
+    for ev in ev_press.read() {
+        if let Ok(mut seg) = query.get_mut(ev.entity) {
+            let mat = assets.get_mut(seg.hover_material.clone()).unwrap();
+
+            // on click: cycle color and reset hover timer
+            seg.hover_start = time.elapsed();
+            mat.emissive.set_h((mat.emissive.h() + 30.0) % 360.0);
+        }
+    }
+}
+
+
+
 fn main() {
     App::new()
         .add_plugins(
@@ -136,6 +155,7 @@ fn main() {
         .add_systems(Update, on_hover)
         .add_systems(Update, fade)
         .add_systems(Update, rotate)
+        .add_systems(Update, on_press)
         .add_plugins(hover::MouseRayPlugin)
         .run();
 }
