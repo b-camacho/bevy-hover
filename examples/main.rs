@@ -10,6 +10,7 @@ use bevy_hover as hover;
 #[derive(Component)]
 struct SphereSeg {
     hover_start: Duration,
+    press_start: Duration,
     hover_material: Handle<StandardMaterial>,
 }
 
@@ -56,6 +57,7 @@ fn setup(
         });
         seg.insert(SphereSeg {
             hover_start: Duration::from_secs(0),
+            press_start: Duration::from_secs(0),
             hover_material: material.clone(),
         });
         ids.push(seg.id());
@@ -118,6 +120,17 @@ fn fade(
     }
 }
 
+fn shrink(
+    mut query: Query<(&mut SphereSeg, &mut Transform)>,
+    time: Res<Time>,
+) {
+    for (seg, mut tr) in query.iter_mut() {
+        let elapsed = (time.elapsed() - seg.press_start).as_millis();
+        let v = (elapsed as f32).map_clamped((0.0, 1000.0), (0.8, 1.0));
+        tr.scale = Vec3::new(v,v,v);
+    }
+}
+
 fn on_press(
     mut query: Query<&mut SphereSeg>,
     mut ev_press: EventReader<hover::HoverPress>,
@@ -130,6 +143,7 @@ fn on_press(
 
             // on click: cycle color and reset hover timer
             seg.hover_start = time.elapsed();
+            seg.press_start = time.elapsed();
             mat.emissive.set_h((mat.emissive.h() + 30.0) % 360.0);
         }
     }
@@ -154,6 +168,7 @@ fn main() {
         .add_systems(Startup, setup)
         .add_systems(Update, on_hover)
         .add_systems(Update, fade)
+        .add_systems(Update, shrink)
         .add_systems(Update, rotate)
         .add_systems(Update, on_press)
         .add_plugins(hover::MouseRayPlugin)
