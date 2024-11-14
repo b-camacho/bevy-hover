@@ -1,7 +1,6 @@
 use bevy::prelude::*;
 
 use bevy::render::mesh::VertexAttributeValues;
-use std::collections::HashMap;
 
 #[derive(Component, Default)]
 /// This crate only looks at `Hoverable` entities
@@ -295,7 +294,7 @@ pub fn moller_trumbore(
     let a = edge1.dot(h);
 
     if a > -epsilon && a < epsilon {
-        return None; // This ray is parallel to this triangle
+        return None; // ray parallel to triangle
     }
 
     let f = 1.0 / a;
