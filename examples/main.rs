@@ -4,6 +4,7 @@ use bevy::prelude::*;
 use bevy::window::WindowResolution;
 use std::f32::consts::PI;
 use std::time::Duration;
+use bevy::asset::AssetMetaCheck;
 
 use bevy_hover as hover;
 
@@ -153,6 +154,7 @@ fn on_press(
 
 fn main() {
     App::new()
+        .insert_resource(AssetMetaCheck::Never)
         .add_plugins(
             DefaultPlugins
                 .set(WindowPlugin {
